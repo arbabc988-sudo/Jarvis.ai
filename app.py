@@ -1,5 +1,6 @@
 import streamlit as st
-from groq import Groq
+import urllib.request
+import json
 
 # Page configuration
 st.set_page_config(page_title="Jarvis AI", page_icon="🤖", layout="centered")
@@ -7,14 +8,14 @@ st.set_page_config(page_title="Jarvis AI", page_icon="🤖", layout="centered")
 st.title("🤖 Jarvis - Cloud Accelerated")
 st.write("Aapka personal AI assistant ab Cloud par 24/7 super-fast chal raha hai!")
 
-# Groq API Client initialize karein (Streamlit Secrets se key uthayega)
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# Groq API Key from Streamlit Secrets
+api_key = st.secrets["GROQ_API_KEY"]
 
 # Initialize chat history in session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat messages from history on app rerun
+# Display chat messages from history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -25,24 +26,36 @@ if prompt := st.chat_input("Apna sawal yahan poochen..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate assistant response using Groq Cloud API
+    # Generate response using Groq API via standard Python (No extra package needed!)
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
-
+        
         try:
-            completion = client.chat.completions.create(
-                model="qwen-2.5-32b",  # Fast and smart open-source model
-                messages=st.session_state.messages,
-                stream=True
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "qwen-2.5-32b",
+                "messages": [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                "stream": False
+            }
+            
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(payload).encode('utf-8'), 
+                headers=headers, 
+                method='POST'
             )
-
-            for chunk in completion:
-                content = chunk.choices[0].delta.content or ""
-                full_response += content
-                message_placeholder.markdown(full_response + "▌")
-
-            message_placeholder.markdown(full_response)
+            
+            with urllib.request.urlopen(req) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                full_response = res_data['choices'][0]['message']['content']
+                message_placeholder.markdown(full_response)
+                
         except Exception as e:
             full_response = f"Error: {e}"
             message_placeholder.markdown(full_response)
